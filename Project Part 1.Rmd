@@ -1,0 +1,230 @@
+---
+title: "Project Part 1: Analytical Study of Efficiency, Usage, and Specialization in NBA Player Performance (2024–2025 Season)" 
+author: Dylan Lee
+fontsize: 12pt
+date: "11/4/2025"
+geometry: margin=1in
+urlcolor: black
+output: pdf_document
+header-includes:
+- \usepackage{setspace}
+- \onehalfspacing
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, highlight=FALSE)
+```
+
+```{r, echo=FALSE, warning=FALSE, message=FALSE}
+library(rvest)
+library(readr)
+library(ggplot2)
+library(dplyr)
+
+url <- "https://www.basketball-reference.com/leagues/NBA_2025_totals.html"
+webpage <- read_html(url)
+stats_table <- webpage %>% 
+  html_nodes("table") %>% 
+  .[1] %>% 
+  html_table(fill = TRUE)
+nba_data_2025 <- stats_table[[1]]
+nba_data_2025_clean <- nba_data_2025 %>%
+  filter(Rk != "Rk")
+non_numeric_cols <- c("Player", "Pos", "Team")
+nba_data_2025_clean <- nba_data_2025_clean %>%
+  mutate(across(
+    .cols = -all_of(non_numeric_cols), 
+    .fns = as.numeric
+  ))
+nba_data_2025_clean <- nba_data_2025_clean %>%
+  mutate(
+    MPG = MP / G
+  )
+mpg_quant <- quantile(nba_data_2025_clean$MPG, 
+                         probs = c(0, 0.25, 0.5, 0.75, 1.0),
+                         na.rm = TRUE)
+min_MPG <- 12.0
+nba_MPG_filtered <- nba_data_2025_clean %>%
+  filter(MPG >= min_MPG)
+```
+
+## Introduction
+
+Basketball is one of the premier sports of the world with a massive following throughout the world with nearly 450 million people playing today. Despite being this popular, many simply watch or play for entertainment and don’t bother to think about the more nuanced parts of the game. In this project, I aim to analyze the efficiency, usage, and specialization of NBA players by observing specific variables and how they effect certain statistics. The main variables that I will be observing are position, assists, turnovers, points, minutes per game, three point attempts, and three point field goal percentage. While these might not cover every important statistic for a basketball player, I do believe that these are some of the most important, especially in the modern NBA. With the points, assists, turnovers, three point attempts, and three point field goal percentage, we can get a good idea of the offensive efficiency of a general player in the NBA. However, this data can be misleading with the many nba players in the league and some of them being very obvious outliers. To remedy this, I will be observing these variables in response to minutes per game and/or the players position. With all of that said, my three research questions are as follows:
+
+-   Did Point Guards (PG) with fewer than 1,000 Total Points (PTS) have a higher average Total Assists (AST) than Shooting Guards (SG) with fewer than 1,000 Total Points in the 2024-2025 season?
+-   At every position, does an Assist-to-Turnover Ratio of 3.0 or higher average fewer Minutes Played per Game (MPG) than those with an Assist-to-Turnover Ratio below 2.0 in the 2024-2025 season
+-   In the 2024-2025 season, did players who attempted more than 7 three-pointers per game have a lower average three-point field goal percentage than players who attempted between 4 and 7 three-pointers per game?
+
+## Data Summary
+
+The primary source that was used was Basketball Reference. Basketball Reference is an online website that specializes in the many statistics that can be computed in basketball. These range from points scored in a game to the lesser-known VORP. In addition to all of the statistics that the website contains, it also has general information about the teams and players in the league, along with the awards that the specific player has won.
+
+Although this website is not directly affiliated with the NBA, it remains a trustworthy source as it obtains its information directly from the NBA. This is because the parent website, Sports Reference, signed a deal with SportsRadar back in late 2018, which is also the official statistics provider for the NBA. As said in the article, “With our SportRadar partnership we will be able to apply statistical changes more seamlessly” (Lynch, 2018). With such a trustworthy partner, it is easy to see how Basketball Reference is a highly credible website from which we can pull data. It also helps us see how this data, which is the population of NBA players in the league, was gathered in the first place.
+
+With the data, I had to modify it, where I first made all of the actual numerical statistics into numerics before mutating the data in order to get a minutes per game variable, which will be useful later. In addition, I made another data table from the cleaned one that got rid of any players who averaged less than 12 minutes for the season. This was to decrease ambiguity, as these players were in the first quartile of minutes per game, and the odds that they had as consistent results as the other players were lower. I specifically only made this change to a new data table, though, as one of my questions deals with minutes per game, so I wanted to include all of the data.
+
+Some potential issues with this data set are that it is limited to one season. While this may not be a problem in this specific case, as I want to examine the statistics from a singular season, if I wanted to look at the data across multiple seasons, this would prove to be difficult. In addition to that, data like this can vary from year to year, especially in a major sports league, so the data and conclusions that I find here could very well differ in some other year.
+
+Despite all of this, the data is appropriate to answer all of my questions, as it contains the relevant and accurate data that is necessary for my research questions. \## Data Dictionary - Position (Pos): The listed position that a player plays as. The listed positions include point guard (PG), shooting guard (SG), small forward (SF), power forward (PF), and center (C). \newline - Assists (AST): a statistic given to a player who tosses the last pass leading directly to a made field goal, but only if the player scoring the goal demonstrates an immediate reaction toward the basket after receiving the pass. \newline - Turnovers (TO): a statistic given to a player where they lose possession of the ball and a player on the opposing team gains immediate possession.\newline - Points (PTS): A statistic that is how many points a player has scored.\newline - Minutes per game (MPG): The average number of minutes per game a player has played over a season.\newline - Three point attempts (3PA): How many three pointers a player attempted throughout a season.\newline - Three point field goal percentage (3P%): The total percentage of three pointers made out of total three point attempts for a player per season.
+
+## Data Exploration
+
+```{r, echo=FALSE}
+## R code to create and display summaries in part 1. 
+## This R code will not be printed in the PDF.
+## Remove the ## before all code.
+
+## Question 1 graph
+filtered_data <- nba_MPG_filtered %>%
+  filter(
+    Pos %in% c("PG", "SG"),
+    PTS < 1000
+  )
+
+avg_assists <- filtered_data %>%
+  group_by(Pos) %>%
+  summarize(
+    Avg_AST = mean(AST, na.rm = TRUE)
+  )
+
+scatterplot_pg_sg <- ggplot(data = filtered_data, aes(x = PTS, y = AST, color = Pos))     
+
+scatterplot_pg_sg + geom_point(alpha = 0.7, size = 3) + geom_hline(data = avg_assists, aes(yintercept = Avg_AST, color = Pos),linetype = "dashed",linewidth = 1) + labs(title = "Assists vs. Points for Low-Scoring PGs and SGs (2024-2025)",subtitle = "Comparison of Average Total Assists for Players with < 1000 Total Points",x = "Total Points (PTS)",y = "Total Assists (AST)",color = "Position") + theme_minimal() + theme(plot.title.position = "plot")
+print(scatterplot_pg_sg)
+
+## Question 2
+numerical_summary_data <- nba_data_2025_clean %>%
+  mutate(
+    AST_TO_Ratio = if_else(TOV == 0 | is.na(TOV), AST, AST / TOV)
+  ) %>%
+  mutate(
+    Efficiency_Group = case_when(
+      AST_TO_Ratio >= 3.0 ~ "High Ratio (>= 3.0)",
+      AST_TO_Ratio < 2.0 ~ "Low Ratio (< 2.0)",
+      .default = "Middle Group (Excluded)" 
+    )
+  ) %>%
+  filter(Efficiency_Group != "Middle Group (Excluded)") %>%
+  group_by(Efficiency_Group, Pos) %>%
+  summarize(
+    Player_Count = n(),
+    Average_MPG = mean(MPG, na.rm = TRUE),
+    SD_MPG = sd(MPG, na.rm = TRUE),
+    .groups = 'drop'
+  ) %>%
+  arrange(Pos, Efficiency_Group)
+print(numerical_summary_data)
+
+box_plot_data <- nba_data_2025_clean %>%
+  mutate(
+    MPG = MP / G,
+    AST_TO_Ratio = if_else(TOV == 0 | is.na(TOV), AST, AST / TOV)
+  ) %>%
+  mutate(
+    Efficiency_Group = case_when(
+      AST_TO_Ratio >= 3.0 ~ "High Ratio (>= 3.0)",
+      AST_TO_Ratio < 2.0 ~ "Low Ratio (< 2.0)",
+      .default = "Middle Group (Excluded)"
+    )
+  ) %>%
+  filter(Efficiency_Group != "Middle Group (Excluded)") %>%
+  mutate(
+    Pos = factor(Pos),
+    Efficiency_Group = factor(Efficiency_Group, levels = c("Low Ratio (< 2.0)", "High Ratio (>= 3.0)"))
+  )
+  
+efficiency_box_plot <- ggplot(data = box_plot_data,aes(x = Pos, y = MPG, fill = Efficiency_Group)
+) + geom_boxplot(position = position_dodge(width = 0.8), outlier.shape = 1) + labs(
+    title = "Minutes Played (MPG) by Playmaking Efficiency and Position",
+    subtitle = "Comparing players with High (>= 3.0) vs. Low (< 2.0) Assist-to-Turnover Ratios",
+    x = "Player Position",
+    y = "Average Minutes Played Per Game (MPG)",
+    fill = "AST/TO Ratio Group" # Legend title
+  ) + theme_minimal() +theme(
+    plot.title.position = "plot",
+    axis.text.x = element_text(angle = 45, hjust = 1) # Angle text for better fit
+  )
+print(efficiency_box_plot)
+
+## Question 3
+three_point_data <- nba_MPG_filtered %>%
+  mutate(
+    Three_PA_Per_G = `3PA` / G
+  ) %>%
+  mutate(
+    Volume_Group = case_when(
+      Three_PA_Per_G > 7.0 ~ "High Volume (> 7.0 3PA/G)",
+      Three_PA_Per_G >= 2.0 & Three_PA_Per_G <= 5.0 ~ "Moderate Volume (2.0-5.0 3PA/G)",
+      .default = "Excluded"
+    )
+  ) %>%
+  filter(Volume_Group != "Excluded") %>%
+  mutate(
+    Volume_Group = factor(Volume_Group, 
+                         levels = c("Moderate Volume (2.0-5.0 3PA/G)", "High Volume (> 7.0 3PA/G)"))
+  )
+
+volume_efficiency_boxplot <- ggplot(data = three_point_data,aes(x = Volume_Group, y = `3P%` * 100, fill = Volume_Group)
+) + geom_boxplot(width = 0.5, outlier.shape = 1) + stat_summary(fun = mean, 
+               geom = "point", 
+               shape = 23, 
+               size = 3, 
+               fill = "white") + labs(
+    title = "3-Point Percentage Distribution by Shot Volume (2024-2025)",
+    subtitle = "Comparing High Volume vs. Moderate Volume 3-Point Shooters (Mean shown by white diamond)",
+    x = "3-Point Attempt Volume Group",
+    y = "3-Point Field Goal Percentage (%)",
+    fill = "Volume Group"
+  ) +
+  theme_minimal() +
+  theme(legend.position = "none", plot.title.position = "plot")
+print(volume_efficiency_boxplot)
+
+numerical_summary_3P <- nba_data_2025_clean %>%
+  mutate(
+    Three_PA_Per_G = if_else(G == 0 | is.na(G), 0, `3PA` / G)
+  ) %>%
+  mutate(
+    Volume_Group = case_when(
+      Three_PA_Per_G > 7.0 ~ "High Volume (> 7.0 3PA/G)",
+      Three_PA_Per_G >= 2.0 & Three_PA_Per_G <= 5.0 ~ "Moderate Volume (2.0 - 5.0 3PA/G)",
+      .default = "Excluded"
+    )
+  ) %>%
+  filter(Volume_Group != "Excluded") %>%
+  group_by(Volume_Group) %>%
+  summarize(
+    Player_Count = n(),
+    Average_3P_Percent = mean(`3P%` * 100, na.rm = TRUE),
+    SD_3P_Percent = sd(`3P%` * 100, na.rm = TRUE),
+    .groups = 'drop'
+  )
+print(numerical_summary_3P)
+```
+## Conclusions
+From question 1, it is evident that, on average, point guards who scored below 1000 points in the 2024-2025 NBA season had more assists than shooting guards who scored below 1000 points. As point guards are more known for passing the ball, this graph does seem to make sense, as the point guards, on average, had more assists than the shooting guards. However, because the graph depicts a lower scoring average, the difference between the average assists was smaller than anticipated, as the shooting guards were not as focused on producing points during the game.
+
+With question 2, after comparing the assist-to-turnover ratio between each position, it is clear that the average minutes played fluctuated more for those in the low ratio group compared to the high ratio one. This looks to be true for all positions except for the point guard. This illustrates how, at many positions, having a better assist-to-turnover ratio will mean that a player will get more consistent playing time on average. This fact helps illustrate the idea that if a player at a position that isn’t expected to get many assists can do so without turning the ball over, then they will be seen as more valuable and most likely have more minutes played. 
+
+Finally, with question 3, it is clear that players who shoot more three pointers tend to make them at a higher average rate than those who do not take as many. From the graph, we can see that the high-volume three-point shooters have a more consistent three-point percentage, which makes sense as those who take many of threes will make more of them. This also explains why the average three-point percentage for the high-volume shooters is higher than that of the lower-volume ones. This can also be seen in the table that states the average three-point percentage and the standard deviation of three-point percentage. 
+
+\newpage
+
+## Data Appendix
+```{r}
+head(nba_data_2025_clean, 10)
+head(nba_MPG_filtered, 10)
+```
+
+\newpage
+
+## References
+Basketball Reference. (2024). 2024-25 NBA Player Stats: Totals | Basketball-Reference.com. Basketball-Reference.com. https://www.basketball-reference.com/leagues/NBA_2025_totals.html
+
+Nations, U. (2024, December 21). World Basketball Day. United Nations. https://www.un.org/en/observances/world-basketball-day
+
+Basketball Reference Now Using Official NBA Data | Sports-Reference.com. (2018). Sports-Reference.com. https://www.sports-reference.com/blog/2018/12/basketball-reference-now-using-official-nba-data/
+
+Basketball Reference. (2024). 2024-25 NBA Player Stats: Advanced | Basketball-Reference.com. Basketball-Reference.com. https://www.basketball-reference.com/leagues/NBA_2025_advanced.html
+
